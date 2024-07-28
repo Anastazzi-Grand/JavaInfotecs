@@ -12,6 +12,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.*;
 import java.util.regex.Pattern;
 
@@ -29,25 +31,17 @@ public class MemoryStorageService {
 
     private ConcurrentHashMap<String, Tuple3<String, Long, Long>> storage = new ConcurrentHashMap<>();
 
-    private ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
-        @Override
-        public Thread newThread(Runnable r) {
+    public MemoryStorageService() {
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread th = new Thread(r);
             th.setDaemon(true);
             return th;
-        }
-    });
-
-    public MemoryStorageService() {
-        scheduler.scheduleAtFixedRate(new Runnable() {
-
-            @Override
-            public void run() {
-                long current = System.currentTimeMillis();
-                for (String k : storage.keySet()) {
-                    if (!storage.get(k).isLive(current)) {
-                        storage.remove(k);
-                    }
+        });
+        scheduler.scheduleAtFixedRate(() -> {
+            long current = System.currentTimeMillis();
+            for (String k : storage.keySet()) {
+                if (!storage.get(k).isLive(current)) {
+                    storage.remove(k);
                 }
             }
         }, 1, DEFAULT_EXPIRY_TIME/10, TimeUnit.MILLISECONDS);
@@ -62,15 +56,13 @@ public class MemoryStorageService {
      * */
     public String get(String key) {
         long currentTime = System.currentTimeMillis();
-        //removeExpiredEntries(currentTime);
 
         Tuple3<String, Long, Long> entry = storage.get(key);
         if (entry != null) {
             LOGGER.debug("Извлечено значение '{}' для ключа '{}'", entry.value().toString(), key);
             long remainingTime = Long.parseLong(entry.ttl().toString()) - (currentTime - Long.parseLong(entry.savedTime().toString()));
 
-            StringBuilder str = new StringBuilder("Значение: " + entry.value() + "\n Оставшееся время хранения: " + remainingTime/1000 + "с");
-            return str.toString();
+            return "Значение: " + entry.value() + "\n Оставшееся время хранения: " + remainingTime / 1000 + "с";
         } else {
             LOGGER.debug("Запись для ключа '{}' не найдена", key);
             return null;
@@ -78,8 +70,16 @@ public class MemoryStorageService {
     }
 
     /**
+     * Вывод всех элементов хранилища.
+     * */
+    public Map<String, Tuple3<String, Long, Long>> getAll() {
+        LOGGER.debug("Получение всех записей из хранилища");
+        return new HashMap<>(storage);
+    }
+
+    /**
      * Операция записи (set).
-     * Сохраняет указанное значение под заданным ключом и параметр ttl.
+     * Сохраняет значение под заданным ключом и параметр ttl.
      * Если ключ уже существует, значение и ttl для этого ключа перезаписываются.
      *
      * @param key   ключ, под которым будет сохранено значение
