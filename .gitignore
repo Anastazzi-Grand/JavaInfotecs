@@ -1,4 +1,5 @@
 .gradle
+target/git rm -r --cached target
 build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
